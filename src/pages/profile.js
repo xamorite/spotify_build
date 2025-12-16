@@ -3,35 +3,31 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "../../lib/auth"; // Imports user state and logout
-import { useApi } from "../../lib/api"; // Imports the secure data fetching utility
+import { useAuth } from "../auth/useAuth";
+import { useSpotifyAuth } from "../hooks/useSpotifyAuth";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase/client";
 import {
-  MusicNoteIcon,
   PencilIcon,
-  UserCircleIcon,
   PowerIcon,
 } from "@heroicons/react/24/outline";
-
-// Dummy Components for a working example (Unchanged)
-const ArtistCircle = ({ artist }) => (
-  <div className="flex flex-col items-center flex-shrink-0 w-24">
-    <div className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center text-gray-400">
-      <UserCircleIcon className="w-8 h-8" />
-    </div>
-    <p className="mt-2 text-sm text-white truncate w-full text-center">
-      {artist.name}
-    </p>
-  </div>
-);
+import CircularArtistCard from "../components/circularArtistCard"; // Reusing the nice component
 
 const TrackRow = ({ track, index }) => (
-  <div className="flex items-center p-3 rounded-lg hover:bg-gray-800 transition-colors">
-    <span className="text-gray-400 w-6 text-center text-sm">{index + 1}</span>
-    {/* <MusicNoteIcon className="w-5 h-5 text-gray-400 mx-3" /> */}
-    <div className="flex-grow">
-      <p className="text-white font-medium truncate">{track.title}</p>
-      <p className="text-gray-400 text-sm">{track.artist}</p>
+  <div className="flex items-center p-3 rounded-lg hover:bg-gray-800 transition-colors group">
+    <span className="text-gray-400 w-6 text-center text-sm font-medium group-hover:text-white">{index + 1}</span>
+    <div className="relative w-10 h-10 mr-4 rounded overflow-hidden flex-shrink-0">
+        <img 
+            src={track.album?.images?.[0]?.url || "https://placehold.co/40x40/222/fff?text=T"} 
+            alt={track.title} 
+            className="object-cover w-full h-full"
+        />
     </div>
+    <div className="flex-grow min-w-0">
+      <p className="text-white font-medium truncate">{track.title}</p>
+      <p className="text-gray-400 text-sm truncate">{track.artist}</p>
+    </div>
+    <div className="text-gray-500 text-sm">{/* Duration could go here */}</div>
   </div>
 );
 
@@ -43,12 +39,13 @@ const gradientColors = [
   "from-yellow-600 to-yellow-900",
   "from-amber-800 to-amber-950",
   "from-pink-600 to-pink-900",
+  "from-indigo-600 to-indigo-900",
 ];
 
 const Profile = () => {
   const router = useRouter();
   const { user, isAuthReady, logout } = useAuth();
-  const { fetchAuthenticatedData } = useApi();
+  const { isSpotifyConnected } = useSpotifyAuth();
 
   const [profileDetails, setProfileDetails] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,51 +63,63 @@ const Profile = () => {
   };
 
   useEffect(() => {
-    // --- FIXED: Removed '&& user.id' condition ---
-    // We only check if the user is authenticated and the session is ready.
     if (isAuthReady && user) {
       const fetchProfile = async () => {
         setIsLoading(true);
         setError(null);
 
+        // Pick a random gradient per load for variety
         const randomGradient =
           gradientColors[Math.floor(Math.random() * gradientColors.length)];
         setHeaderGradient(randomGradient);
 
         try {
-          // --- FIXED: Changed endpoint to the secure, token-based path ---
-          // Your UserController has a GET /api/user/profile endpoint.
-          const endpoint = `/user/profile`;
+          // 1. Fetch Firestore Profile Data (Bio, manual customization)
+          let firestoreData = {};
+          if (db && user?.uid) {
+            const snap = await getDoc(doc(db, "users", user.uid));
+            if (snap.exists()) {
+              firestoreData = snap.data();
+            }
+          }
 
-          const data = await fetchAuthenticatedData(endpoint);
+          // 2. Fetch Spotify Data (if connected)
+          let spotifyTopArtists = [];
+          let spotifyTopTracks = [];
 
+          if (isSpotifyConnected) {
+             try {
+                const [artistsRes, tracksRes] = await Promise.all([
+                    fetch("/api/spotify/me/top/artists"),
+                    fetch("/api/spotify/me/top/tracks")
+                ]);
+                
+                if (artistsRes.ok) spotifyTopArtists = await artistsRes.json();
+                if (tracksRes.ok) spotifyTopTracks = await tracksRes.json();
+             } catch (spotifyErr) {
+                 console.warn("Failed to fetch spotify details for profile:", spotifyErr);
+             }
+          }
+
+          // 3. Merge Data
           const detailedData = {
-            ...user, // Start with basic user data (id, email, name)
-            ...data, // Overlay with detailed data from API (fullName, bio, profilePictureUrl)
-            // Ensure fullName is set, prioritizing the API response
-            fullName: data.fullName || user.name || user.email,
-            bio: data.bio || "Music lover, sound explorer, and groove finder.",
+            ...user,
+            ...firestoreData,
+            fullName: firestoreData.fullName || user.name || user.email?.split('@')[0],
+            bio: firestoreData.bio || "Music lover, sound explorer, and groove finder.",
             profilePictureUrl:
-              data.profilePictureUrl ||
-              "https://placehold.co/128x128/374151/ffffff?text=U",
-            // Note: topArtists/topTracks are not returned by the backend, so dummy data is necessary
-            topArtists: data.topArtists || [
-              { name: "Artist A" },
-              { name: "Artist B" },
-              { name: "Artist C" },
-            ],
-            topTracks: data.topTracks || [
-              { title: "Track 1", artist: "Artist X" },
-              { title: "Track 2", artist: "Artist Y" },
-            ],
+              firestoreData.profilePictureUrl ||
+              user.photoURL ||
+              "https://placehold.co/128x128/374151/ffffff?text=" + (user.email?.[0]?.toUpperCase() || "U"),
+            topArtists: spotifyTopArtists.length > 0 ? spotifyTopArtists : (firestoreData.topArtists || []),
+            topTracks: spotifyTopTracks.length > 0 ? spotifyTopTracks : (firestoreData.topTracks || []),
+            isSpotifyLinked: isSpotifyConnected
           };
 
           setProfileDetails(detailedData);
         } catch (err) {
           console.error("Failed to fetch profile:", err);
-          if (err.message && !err.message.includes("Session expired")) {
-            setError(err.message || "Failed to load profile data.");
-          }
+          setError(err.message || "Failed to load profile data.");
         } finally {
           setIsLoading(false);
         }
@@ -118,7 +127,7 @@ const Profile = () => {
 
       fetchProfile();
     }
-  }, [isAuthReady, user, fetchAuthenticatedData]);
+  }, [isAuthReady, user, isSpotifyConnected]);
 
   if (!isAuthReady || user === null) {
     return (
@@ -133,7 +142,10 @@ const Profile = () => {
   if (isLoading || !profileDetails) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white w-full">
-        <p className="text-xl">Loading profile...</p>
+         <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+            <p className="text-xl text-gray-400">Loading profile...</p>
+         </div>
       </div>
     );
   }
@@ -156,93 +168,124 @@ const Profile = () => {
   const profile = profileDetails;
 
   return (
-    <div className="w-full lg:w-[80vw] mx-auto text-white pb-20">
-      {/* ... (rest of the component structure remains the same) ... */}
-      <div
-        className={`h-80 relative bg-gradient-to-t ${headerGradient} rounded-b-xl shadow-2xl`}
-      >
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-sm"></div>
-
-        <div className="absolute bottom-0 left-0 p-6 md:p-8 flex items-end w-full">
-          <img
-            src={profile.profilePictureUrl}
-            alt={`${profile.fullName}'s profile`}
-            onError={(e) => {
-              e.target.onerror = null;
-              e.target.src =
-                "https://placehold.co/128x128/374151/ffffff?text=U";
-            }}
-            className="w-32 h-32 md:w-40 md:h-40 rounded-full object-cover border-4 border-gray-900 shadow-xl"
-          />
-
-          <div className="ml-6 flex-grow min-w-0">
-            <p className="text-sm font-semibold text-gray-300">Profile</p>
-            <h1 className="text-4xl md:text-6xl font-extrabold truncate">
-              {profile.fullName || profile.email}
-            </h1>
-            <p className="text-sm text-gray-300 mt-1 truncate">{profile.bio}</p>
+    <div className="min-h-screen bg-black text-white pb-20">
+      
+      {/* Header Section */}
+      <div className={`relative h-80 md:h-96 w-full bg-gradient-to-b ${headerGradient}`}>
+        <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"></div>
+        
+        {/* Profile Info Container */}
+        <div className="absolute bottom-0 left-0 w-full p-6 md:p-10 flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-8 bg-gradient-to-t from-black via-black/60 to-transparent">
+          
+          {/* Profile Picture */}
+          <div className="relative group">
+            <img
+                src={profile.profilePictureUrl}
+                alt={profile.fullName}
+                onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = "https://placehold.co/128x128/374151/ffffff?text=U";
+                }}
+                className="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover shadow-2xl border-4 border-black/50 group-hover:scale-105 transition-transform duration-300"
+            />
+            {profile.isSpotifyLinked && (
+                <div className="absolute bottom-2 right-2 bg-green-500 rounded-full p-1.5 border-4 border-black" title="Connected to Spotify">
+                    <svg className="w-4 h-4 text-black fill-current" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.38C8.88 5.88 15.96 6.24 20.04 8.521c.539.3.719.96.419 1.5-.239.54-.899.72-1.38.42z"/></svg>
+                </div>
+            )}
           </div>
 
-          <div className="flex space-x-3 absolute top-6 right-6">
-            <button
-              onClick={updateProfile}
-              className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors text-white"
-              aria-label="Edit Profile"
-            >
-              <PencilIcon className="w-6 h-6" />
-            </button>
-            <button
-              onClick={logout}
-              className="p-2 rounded-full bg-red-600 hover:bg-red-700 transition-colors text-white"
-              aria-label="Logout"
-            >
-              <PowerIcon className="w-6 h-6" />
-            </button>
+          {/* Text Info */}
+          <div className="flex-grow text-center md:text-left z-10 w-full md:w-auto">
+            <p className="text-xs md:text-sm font-bold uppercase tracking-wider mb-1 text-white/80">Profile</p>
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold mb-4 tracking-tight shadow-sm">
+                {profile.fullName}
+            </h1>
+            <p className="text-white/70 max-w-2xl text-sm md:text-base font-medium">
+                {profile.bio}
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3 mb-2 md:mb-4">
+              <button
+                onClick={updateProfile}
+                className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 rounded-full transition-all text-sm font-medium"
+              >
+                <PencilIcon className="w-4 h-4" />
+                <span>Edit</span>
+              </button>
+              
+              <button
+                onClick={logout}
+                className="p-2 bg-red-500/10 hover:bg-red-500/20 md:bg-transparent md:hover:bg-red-600/20 text-red-500 rounded-full transition-all"
+                title="Sign Out"
+              >
+                <PowerIcon className="w-6 h-6" />
+              </button>
           </div>
         </div>
       </div>
 
-      <div className="p-4 md:p-8">
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-white mb-4">
-            Your top artists
-          </h2>
-          <p className="text-sm text-gray-400 mb-4">
-            Based on your recent listening
-          </p>
-
-          <div className="flex space-x-4 overflow-x-auto pb-4 scrollbar-hide">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-12">
+        
+        {/* Top Artists Section */}
+        <section>
+          <div className="flex items-end justify-between mb-6">
+            <h2 className="text-2xl font-bold">Top Artists</h2>
+            {!profile.isSpotifyLinked && (
+                 <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">Offline Data</span>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-6">
             {profile.topArtists && profile.topArtists.length > 0 ? (
-              profile.topArtists.map((artist, index) => (
-                <ArtistCircle key={index} artist={artist} />
+              profile.topArtists.slice(0, 6).map((artist, index) => (
+                <CircularArtistCard 
+                    key={artist.id || index} 
+                    artistName={artist.name} 
+                    imageUrl={artist.images?.[0]?.url} 
+                    subscriberCount={artist.genres?.[0] || 'Artist'} 
+                />
               ))
             ) : (
-              <p className="text-gray-500">No top artists data available.</p>
+                <div className="col-span-full h-32 flex items-center justify-center bg-white/5 rounded-xl border border-white/5 border-dashed">
+                    <p className="text-gray-500">No artists to display yet.</p>
+                </div>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-white mb-4">
-            Top tracks this month
-          </h2>
-          <p className="text-sm text-gray-400 mb-4">Only visible to you</p>
-
-          <div className="space-y-2">
-            {profile.topTracks && profile.topTracks.length > 0 ? (
-              profile.topTracks.map((track, index) => (
-                <TrackRow key={index} track={track} index={index} />
-              ))
-            ) : (
-              <p className="text-gray-500">No top tracks data available.</p>
-            )}
+        {/* Top Tracks Section */}
+        <section>
+          <div className="flex items-end justify-between mb-6">
+             <h2 className="text-2xl font-bold">Top Tracks</h2>
+             <span className="text-sm font-medium text-gray-400 uppercase tracking-widest">This Month</span>
           </div>
-          {profile.topTracks && profile.topTracks.length > 0 && (
-            <button className="mt-6 text-gray-400 text-sm hover:text-white transition-colors">
-              Show all
-            </button>
+
+          <div className="bg-white/5 rounded-xl overflow-hidden border border-white/5">
+             {profile.topTracks && profile.topTracks.length > 0 ? (
+               <div className="divide-y divide-white/5">
+                 {profile.topTracks.slice(0, 5).map((track, index) => (
+                   <TrackRow key={track.id || index} track={track} index={index} />
+                 ))}
+               </div>
+             ) : (
+                <div className="p-12 text-center text-gray-500">
+                    No tracks to display.
+                </div>
+             )}
+          </div>
+          
+          {profile.topTracks && profile.topTracks.length > 5 && (
+              <div className="mt-4 text-center">
+                <button className="text-sm font-medium text-gray-400 hover:text-white transition-colors uppercase tracking-widest">
+                    Show All Tracks
+                </button>
+              </div>
           )}
-        </div>
+        </section>
+
       </div>
     </div>
   );

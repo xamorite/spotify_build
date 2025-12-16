@@ -1,6 +1,6 @@
 // source/hooks/useFetchTracks.js
-import { useEffect, useState } from 'react';
-import { getTracks } from '../api/musicApi'; // Adjust the path if needed
+import { useEffect, useState } from "react";
+import { getTracks } from "../api/musicApi";
 
 const useFetchTracks = () => {
   const [tracks, setTracks] = useState([]);
@@ -18,13 +18,15 @@ const useFetchTracks = () => {
         if (Array.isArray(data)) {
           setTracks(data);
         } else {
-          console.warn('Expected an array but got:', data);
-          setTracks([]); // fallback to empty array
-          setError('Unexpected data format from API.');
+          // eslint-disable-next-line no-console
+          console.warn("Expected an array but got:", data);
+          setTracks([]);
+          setError("Unexpected data format from API.");
         }
       } catch (err) {
-        console.error('Error fetching tracks:', err);
-        setError(err.message || 'Failed to fetch tracks.');
+        // eslint-disable-next-line no-console
+        console.error("Error fetching tracks:", err);
+        setError(err.message || "Failed to fetch tracks.");
         setTracks([]);
       } finally {
         setLoading(false);

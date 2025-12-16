@@ -1,36 +1,32 @@
 // app/login/page.js
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useState } from 'react';
-import { useAuth } from '../../lib/auth';
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useAuth } from "../auth/useAuth";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false); // New state for loading
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuth();
+  const router = useRouter();
 
   // FIX: Make this function asynchronous and await the login result
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setIsSubmitting(true);
     
     try {
-        const success = await login(email, password);
-        
-        if (!success) {
-            // If the login function returns false (indicating a failure after API call)
-            setError('Login failed. Please check your email and password or try again later.');
-        }
-        // If successful, useAuth handles the storage and redirect.
-
+        await login(email, password);
+        // Sync with Spotify immediately (redirect to Spotify Auth)
+        window.location.href = "/api/auth/login";
     } catch (err) {
-        // This catch block handles unexpected errors, though lib/auth.js catches most API errors
         console.error("Login component error:", err);
-        setError('An unexpected error occurred during login.');
+        setError(err.message || "An unexpected error occurred during login.");
     } finally {
         setIsSubmitting(false);
     }
@@ -75,7 +71,7 @@ export default function LoginPage() {
                     : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500'
             }`}
           >
-            {isSubmitting ? 'Logging In...' : 'Log In'}
+            {isSubmitting ? "Logging In..." : "Log In"}
           </button>
         </form>
 

@@ -1,38 +1,32 @@
 import { useCallback } from "react";
+import { usePlayer } from "../player/PlayerContext";
 
-// Use the public environment variable
-const API_HOST = process.env.NEXT_PUBLIC_API_HOST;
-const APP_NAME = 'xamorite_music';
+// With the new iTunes-based API, tracks already include a previewUrl.
+// This hook normalizes that into resolvedStreamUrl for the global player.
 
-const useHandleTrackSelect = (setSelectedTrack) => {
-  const handleTrackSelect = useCallback(async (track) => {
-    // Safety check for the ENV variable
-    if (!API_HOST) {
-      console.error('API_HOST environment variable (NEXT_PUBLIC_API_HOST) is not set.');
-      return; 
-    }
-    
-    try {
-      // Use the ENV variable in the fetch call
-      const res = await fetch(
-        `${API_HOST}/v1/tracks/${track.id}/stream?app_name=${APP_NAME}`,
-        { redirect: "follow" }
-      );
+const useHandleTrackSelect = () => {
+  const { setCurrentTrack, setCurrentTime, setIsPlaying } = usePlayer();
 
-      // If the response is a redirect, the final URL will be in res.url
-      const finalStreamUrl = res.url;
-
-      // Add resolved URL to the track object
-      setSelectedTrack({
+  const handleTrackSelect = useCallback(
+    (track) => {
+      if (!track) return;
+      const resolvedStreamUrl = track.resolvedStreamUrl || track.previewUrl;
+      if (!resolvedStreamUrl) {
+        // eslint-disable-next-line no-console
+        console.warn("No preview/stream URL available for track:", track);
+      }
+      setCurrentTrack({
         ...track,
-        resolvedStreamUrl: finalStreamUrl,
+        resolvedStreamUrl,
       });
-    } catch (error) {
-      console.error("Error resolving track stream URL:", error);
-    }
-  }, [setSelectedTrack]);
+      setCurrentTime(0);
+      setIsPlaying(true);
+    },
+    [setCurrentTrack, setCurrentTime, setIsPlaying]
+  );
 
   return handleTrackSelect;
 };
 
 export default useHandleTrackSelect;
+

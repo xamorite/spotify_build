@@ -1,25 +1,29 @@
 // app/register/page.js
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useState } from 'react';
-import { useAuth } from '../../lib/auth';
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useAuth } from "../auth/useAuth";
 
 export default function RegisterPage() {
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
   const { register } = useAuth();
+  const router = useRouter();
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // 1. Add new users: Calls the mock register function
-    if (register(form)) {
-        alert('Registration successful! Please log in.');
-    } else {
-        alert('Registration failed. Please try again.');
+    try {
+      await register(form);
+      // Sync with Spotify immediately (redirect to Spotify Auth)
+      window.location.href = "/api/auth/login";
+    } catch (err) {
+      console.error("Registration failed:", err);
+      alert(err.message || "Registration failed. Please try again.");
     }
   };
 

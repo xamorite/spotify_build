@@ -1,13 +1,15 @@
 // app/profile-setup/page.js
 "use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useApi } from '../../lib/api'; // Use the secure API fetch utility
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { useAuth } from "../auth/useAuth";
+import { db } from "../firebase/client";
 
 export default function ProfileSetupPage() {
   const router = useRouter();
-  const { fetchAuthenticatedData } = useApi();
+  const { user } = useAuth();
 
   // Initialize with empty strings for the fields expected by UserProfile.java
   const [form, setForm] = useState({ 
@@ -27,38 +29,29 @@ export default function ProfileSetupPage() {
     setIsLoading(true);
     setError(null);
 
-    // Retrieve the user ID from the session (set during login/registration)
-    const userString = localStorage.getItem('user');
-    const user = userString ? JSON.parse(userString) : null;
-
-    if (!user || !user.id) {
-        setError("User session ID not found. Please log in.");
-        setIsLoading(false);
-        return;
+    if (!db || !user?.uid) {
+      setError("User session not found. Please log in.");
+      setIsLoading(false);
+      return;
     }
 
     try {
+      const payload = {
+        fullName: form.fullName.trim(),
+        bio: form.bio.trim(),
+        profilePictureUrl: form.profilePictureUrl.trim(),
+        updatedAt: serverTimestamp(),
+      };
 
-        const endpoint = `/user/profile/update`; // Define this PUT endpoint in your UserController
+      await setDoc(doc(db, "users", user.uid), payload, { merge: true });
 
-        // Prepare the payload for the backend DTO (UserProfileUpdate)
-        const payload = {
-            fullName: form.fullName.trim(),
-            bio: form.bio.trim(),
-            profilePictureUrl: form.profilePictureUrl.trim(),
-        };
-
-        await fetchAuthenticatedData(endpoint, 'PUT', payload);
-
-        // Success: Redirect to the main profile page
-        alert('Profile details saved successfully! Welcome!');
-        router.push('/home');
-
+      alert("Profile details saved successfully! Welcome!");
+      router.push("/home");
     } catch (err) {
-        console.error("Profile setup failed:", err);
-        setError(err.message || 'Failed to update profile. Please try again.');
+      console.error("Profile setup failed:", err);
+      setError(err.message || "Failed to update profile. Please try again.");
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 

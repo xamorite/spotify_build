@@ -4,7 +4,7 @@ const NewArrival = ({ track }) => {
       {/* Image Section */}
       <div className="w-full sm:w-64 h-64 sm:h-full flex-shrink-0">
         <img
-          src={track.artwork["480x480"]}
+          src={track.artwork?.["480x480"] || track.artwork?.["150x150"]}
           alt={track.title}
           className="w-full h-full object-cover sm:rounded-l-3xl"
         />
@@ -16,7 +16,9 @@ const NewArrival = ({ track }) => {
         <h2 className="text-base font-medium tracking-tighter text-white lg:text-3xl">
           {track.title}
         </h2>
-        <p className="mt-2 text-sm text-gray-100">{track.user.name}</p>
+        <p className="mt-2 text-sm text-gray-100">
+          {track.user?.name || track.artist}
+        </p>
         <p className="mt-2 text-sm text-gray-100">{track.formattedDuration}</p>
         <a
           href={track.fullPermalink}
@@ -24,7 +26,7 @@ const NewArrival = ({ track }) => {
           rel="noopener noreferrer"
           className="inline-flex items-center justify-center px-6 py-2.5 mt-4 text-sm font-medium text-white duration-200 bg-purplebutton  rounded-full hover:pointer hover:border-white hover:text-white focus:outline-none"
         >
-          Listen on Audius
+          Open in Spotify
         </a>
       </div>
     </div>
