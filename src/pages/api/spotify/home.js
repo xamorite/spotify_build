@@ -1,6 +1,6 @@
 // src/pages/api/spotify/home.js
 
-import { fetchHomeSections, mapSpotifyTrack } from "../../../../src/api/spotifyClient";
+import { fetchHomeSections, mapSpotifyTrack } from "@/api/spotifyClient";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {

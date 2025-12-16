@@ -1,5 +1,5 @@
 // src/pages/api/spotify/me/top/artists.js
-import { getUserTopArtists } from "../../../../../src/api/spotifyClient";
+import { getUserTopArtists } from "@/api/spotifyClient";
 
 export default async function handler(req, res) {
   const accessToken = req.cookies["spotify_access_token"];

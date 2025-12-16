@@ -1,5 +1,5 @@
 // src/pages/api/spotify/me/recent.js
-import { getUserRecentlyPlayed } from "../../../../../src/api/spotifyClient";
+import { getUserRecentlyPlayed } from "@/api/spotifyClient";
 
 export default async function handler(req, res) {
   const accessToken = req.cookies["spotify_access_token"];

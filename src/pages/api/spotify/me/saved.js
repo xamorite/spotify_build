@@ -1,5 +1,5 @@
 // src/pages/api/spotify/me/saved.js
-import { getUserLikedTracks } from "../../../../../src/api/spotifyClient";
+import { getUserLikedTracks } from "@/api/spotifyClient";
 
 export default async function handler(req, res) {
   const accessToken = req.cookies["spotify_access_token"];
